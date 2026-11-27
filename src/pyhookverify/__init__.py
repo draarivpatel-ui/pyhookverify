@@ -15,9 +15,12 @@ from .core import MAX_CANDIDATE_SIGNATURES, WebhookVerifier
 from .encoding import ct_equal, decode_base64, decode_hex, parse_timestamp
 from .errors import HookVerifyError, Headers, HeaderValue, ReplayStore, VerificationResult
 from .providers import (
+    BUILTIN_ALIASES,
     BUILTIN_PROVIDERS,
     Provider,
     get_provider,
+    provider_aliases,
+    register_alias,
     register_provider,
     registered_providers,
 )
@@ -36,7 +39,10 @@ __all__ = [
     "register_provider",
     "get_provider",
     "registered_providers",
+    "register_alias",
+    "provider_aliases",
     "BUILTIN_PROVIDERS",
+    "BUILTIN_ALIASES",
     "decode_hex",
     "decode_base64",
     "parse_timestamp",

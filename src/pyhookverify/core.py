@@ -20,7 +20,8 @@ class WebhookVerifier:
     Args:
         secrets: Rotation list of shared secrets. Each is tried in order.
         provider: Registered provider name (github, stripe, slack, shopify,
-            linear, svix, or a custom provider).
+            linear, svix, or a custom provider) or alias such as
+            ``standard-webhooks``. Aliases resolve to the canonical provider.
         replay_store: Store that enforces one-time consumption. Defaults to a
             bounded in-memory store.
         tolerance_seconds: Maximum accepted past/future timestamp skew.

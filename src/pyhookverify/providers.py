@@ -1,4 +1,4 @@
-"""Pluggable HMAC provider registry and six built-in provider definitions.
+"""Pluggable HMAC provider registry, six built-in providers, and aliases.
 
 A provider parses provider-specific headers, computes HMACs over the exact
 raw body, and returns the list of candidate decoded signatures. The verifier
@@ -24,7 +24,10 @@ __all__ = [
     "register_provider",
     "get_provider",
     "registered_providers",
+    "register_alias",
+    "provider_aliases",
     "BUILTIN_PROVIDERS",
+    "BUILTIN_ALIASES",
 ]
 
 
@@ -41,6 +44,8 @@ class Provider:
 
 
 _REGISTRY: Dict[str, Provider] = {}
+# Lowercased alias -> canonical registered provider name.
+_ALIASES: Dict[str, str] = {}
 
 
 def register_provider(provider: Provider, *, replace: bool = False) -> None:
@@ -54,22 +59,52 @@ def register_provider(provider: Provider, *, replace: bool = False) -> None:
         raise HookVerifyError("invalid_config", "provider parser must be callable")
     if name in _REGISTRY and not replace:
         raise HookVerifyError("duplicate_provider", "provider %s already registered" % name)
+    if name.lower() in _ALIASES:
+        raise HookVerifyError("duplicate_provider", "provider name %s is an alias" % name)
     _REGISTRY[name] = provider
 
 
+def register_alias(alias: str, provider_name: str, *, replace: bool = False) -> None:
+    """Register ``alias`` as another name for a registered provider.
+
+    Aliases are case-insensitive and resolve to the canonical provider, so a
+    verifier built from an alias reports and behaves as that provider. An
+    alias may not shadow a registered provider name. Rebinding an existing
+    alias raises ``duplicate_provider`` unless ``replace=True``.
+    """
+    if not is_safe_header_name(alias):
+        raise HookVerifyError("invalid_config", "alias must be an ASCII token")
+    target = get_provider(provider_name).name
+    key = alias.lower()
+    if key in _REGISTRY:
+        raise HookVerifyError("duplicate_provider", "alias %s is a provider name" % alias)
+    if key in _ALIASES and not replace:
+        raise HookVerifyError("duplicate_provider", "alias %s already registered" % alias)
+    _ALIASES[key] = target
+
+
 def get_provider(name: str) -> Provider:
-    """Look up a provider by case-insensitive name."""
+    """Look up a provider by case-insensitive name or alias."""
     if not isinstance(name, str):
         raise HookVerifyError("unknown_provider", "provider must be a string")
     key = name.lower()
+    key = _ALIASES.get(key, key)
     if key not in _REGISTRY:
         raise HookVerifyError("unknown_provider", "unknown provider: %s" % name)
     return _REGISTRY[key]
 
 
 def registered_providers() -> Tuple[str, ...]:
-    """Names of all registered providers, sorted."""
+    """Canonical names of all registered providers, sorted.
+
+    Aliases are not included; see ``provider_aliases()``.
+    """
     return tuple(sorted(_REGISTRY))
+
+
+def provider_aliases() -> Dict[str, str]:
+    """A copy of the alias table, mapping lowercased alias to provider name."""
+    return dict(sorted(_ALIASES.items()))
 
 
 def _get_headers(headers: Headers, name: str, *, required: bool = True) -> List[str]:
@@ -228,10 +263,16 @@ BUILTIN_PROVIDERS: Tuple[Provider, ...] = (
     Provider("svix", _svix, builtin=True),
 )
 
+BUILTIN_ALIASES: Dict[str, str] = {
+    "standard-webhooks": "svix",
+}
+
 
 def _install_builtins() -> None:
     for provider in BUILTIN_PROVIDERS:
         register_provider(provider)
+    for alias, provider_name in BUILTIN_ALIASES.items():
+        register_alias(alias, provider_name)
 
 
 _install_builtins()

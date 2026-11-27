@@ -6,11 +6,14 @@ import hmac
 import unittest
 
 from pyhookverify import (
+    BUILTIN_ALIASES,
     BUILTIN_PROVIDERS,
     HookVerifyError,
     Provider,
     WebhookVerifier,
     get_provider,
+    provider_aliases,
+    register_alias,
     register_provider,
     registered_providers,
 )
@@ -428,6 +431,83 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaises(HookVerifyError) as cm:
             verifier.verify({}, b"abc")
         self.assertEqual(cm.exception.code, "invalid_signature")
+
+
+class StandardWebhooksAliasTests(SvixTests):
+    """The standard-webhooks alias runs the full svix suite."""
+
+    provider = "standard-webhooks"
+
+
+class AliasTests(unittest.TestCase):
+    def test_builtin_alias_table(self):
+        self.assertEqual(BUILTIN_ALIASES, {"standard-webhooks": "svix"})
+        self.assertEqual(provider_aliases()["standard-webhooks"], "svix")
+
+    def test_alias_resolves_to_canonical_provider(self):
+        self.assertIs(get_provider("standard-webhooks"), get_provider("svix"))
+        verifier = WebhookVerifier(["secret"], "standard-webhooks")
+        self.assertEqual(verifier.provider, "svix")
+
+    def test_alias_lookup_case_insensitive(self):
+        self.assertIs(get_provider("Standard-Webhooks"), get_provider("svix"))
+        self.assertIs(get_provider("STANDARD-WEBHOOKS"), get_provider("svix"))
+
+    def test_aliases_not_in_registered_providers(self):
+        self.assertNotIn("standard-webhooks", registered_providers())
+
+    def test_provider_aliases_returns_copy(self):
+        provider_aliases()["tampered"] = "github"
+        self.assertNotIn("tampered", provider_aliases())
+
+    def test_conflicting_alias_rejected(self):
+        with self.assertRaises(HookVerifyError) as cm:
+            register_alias("standard-webhooks", "github")
+        self.assertEqual(cm.exception.code, "duplicate_provider")
+        self.assertEqual(get_provider("standard-webhooks").name, "svix")
+
+    def test_conflicting_alias_case_variant_rejected(self):
+        with self.assertRaises(HookVerifyError) as cm:
+            register_alias("Standard-Webhooks", "github")
+        self.assertEqual(cm.exception.code, "duplicate_provider")
+
+    def test_alias_replace(self):
+        register_alias("alias-replace", "github")
+        register_alias("alias-replace", "stripe", replace=True)
+        self.assertEqual(get_provider("alias-replace").name, "stripe")
+
+    def test_same_alias_without_replace_rejected(self):
+        register_alias("alias-dup", "github")
+        with self.assertRaises(HookVerifyError) as cm:
+            register_alias("alias-dup", "github")
+        self.assertEqual(cm.exception.code, "duplicate_provider")
+
+    def test_alias_cannot_shadow_provider_name(self):
+        for replace in (False, True):
+            with self.assertRaises(HookVerifyError) as cm:
+                register_alias("GitHub", "stripe", replace=replace)
+            self.assertEqual(cm.exception.code, "duplicate_provider")
+        self.assertEqual(get_provider("github").name, "github")
+
+    def test_provider_cannot_shadow_alias(self):
+        for replace in (False, True):
+            with self.assertRaises(HookVerifyError) as cm:
+                register_provider(
+                    Provider("standard-webhooks", lambda h, b: (None, [], b)),
+                    replace=replace,
+                )
+            self.assertEqual(cm.exception.code, "duplicate_provider")
+        self.assertEqual(get_provider("standard-webhooks").name, "svix")
+
+    def test_alias_to_unknown_provider_rejected(self):
+        with self.assertRaises(HookVerifyError) as cm:
+            register_alias("alias-unknown", "nope")
+        self.assertEqual(cm.exception.code, "unknown_provider")
+
+    def test_invalid_alias_name_rejected(self):
+        with self.assertRaises(HookVerifyError) as cm:
+            register_alias("bad alias!", "svix")
+        self.assertEqual(cm.exception.code, "invalid_config")
 
 
 if __name__ == "__main__":

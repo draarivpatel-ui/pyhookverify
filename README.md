@@ -45,6 +45,24 @@ Always pass the raw request body (`bytes`, `bytearray`, or `memoryview`). Passin
 
 Provider names are case-insensitive. Header names are normalized case-insensitively; a duplicate or ambiguous signature header is rejected with `duplicate_header`.
 
+### Provider aliases
+
+| Alias | Resolves to |
+| --- | --- |
+| `standard-webhooks` | `svix` |
+
+An alias is another name for a registered provider. Alias lookup is case-insensitive, and a verifier built from an alias behaves exactly like the canonical provider: `WebhookVerifier(["secret"], "standard-webhooks").provider` is `"svix"`, and `VerificationResult.provider` reports `"svix"`.
+
+```python
+from pyhookverify import provider_aliases, register_alias, registered_providers
+
+register_alias("acme-hooks", "svix")
+print(provider_aliases())      # {'acme-hooks': 'svix', 'standard-webhooks': 'svix'}
+print(registered_providers())  # canonical provider names only, aliases excluded
+```
+
+Registering an alias that is already bound raises `duplicate_provider` unless `replace=True` is passed. An alias can never share a name with a registered provider, in either direction, and its target must already be registered.
+
 ## Framework examples
 
 ### FastAPI
@@ -186,7 +204,7 @@ The in-memory replay store is per-process and bounded. Under a valid-signature f
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
-166 deterministic tests cover all six providers, strict hex and base64 rejection, timestamp edges, key rotation, multi-signature replay bypass attempts, pre-auth store poisoning, raw-body type enforcement, replay-store caps and concurrency, and header normalization.
+188 deterministic tests cover all six providers, provider aliases, strict hex and base64 rejection, timestamp edges, key rotation, multi-signature replay bypass attempts, pre-auth store poisoning, raw-body type enforcement, replay-store caps and concurrency, and header normalization.
 
 ## License
 
